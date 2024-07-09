@@ -6,7 +6,7 @@ WARNING: you SHOULD NOT use ".to()" or ".cuda()" in each implementation block.
 import torch
 from torch import Tensor, nn, optim
 from torch.nn import functional as F
-
+import time # measure runtime
 
 def hello_transformers():
     print("Hello from transformers.py!")
@@ -401,7 +401,7 @@ class MultiHeadAttention(nn.Module):
         # Replace "pass" statement with your code
         self._num_heads = num_heads
         # (1)
-        self._attn_heads = nn.ModuleList(
+        self.heads = nn.ModuleList(
             [SelfAttention(dim_in, dim_out, dim_out) for _ in range(num_heads)])
         
         def get_bounds(d_in: int, d_out: int):
@@ -454,7 +454,7 @@ class MultiHeadAttention(nn.Module):
         # nn.Linear mapping function defined in the initialization step.         #
         ##########################################################################
         # Replace "pass" statement with your code
-        heads = [head(query, key, value, mask) for head in self._attn_heads]
+        heads = [head(query, key, value, mask) for head in self.heads]
         y = torch.cat(heads, dim=2)
         y = self._linear(y)
         ##########################################################################
@@ -988,7 +988,7 @@ def position_encoding_simple(K: int, M: int) -> Tensor:
     # times to create a tensor of the required output shape                      #
     ##############################################################################
     # Replace "pass" statement with your code
-    encodings = torch.tensor(torch.linspace(0, 1, K + 1)[:-1])
+    encodings = torch.linspace(0, 1, K + 1)[:-1]
     y = torch.stack((encodings,) * M, dim=1).unsqueeze(0)
     ##############################################################################
     #               END OF YOUR CODE                                             #
@@ -1017,13 +1017,20 @@ def position_encoding_sinusoid(K: int, M: int) -> Tensor:
     # alternating sines and cosines along the embedding dimension M.             #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
-    # positions = torch.tensor(torch.linspace(0, K, K + 1)[:-1])
-    # positions /= (1e4 ** torch.floor(positions))
-    # print(positions)
-    # sin_enc = torch.sin(positions)
-    # cos_enc = torch.cos(positions)
-    # for p in range(K):
+    seq_pos = torch.arange(0, K, dtype=torch.float32) # 'p'
+    seq_pos = torch.stack((seq_pos,) * M, dim=1) # K, M
+    emb_pos = 2 * torch.arange(0, M, dtype=torch.float32) // M  # 'a'
+    
+    # to match accuracy with the notebook, need to remove the 10_000 * embed_pos term entirely
+    # a = floor(0/4, 2/4, 4/4, 6/4) in ex. 1 => 0,0,1,1
+    # therefore, the last 2 columns should be sin/cos({0,1,2,3}e-4)?
+
+    thetas  = seq_pos / (10_000 ** emb_pos) # 'p/10000^a'
+    even_M = torch.arange(0, M, 2)
+    odd_M = torch.arange(1, M, 2)
+    thetas[:, even_M] = torch.sin(thetas[:, even_M])
+    thetas[:, odd_M] = torch.cos(thetas[:, odd_M])
+    y = thetas.unsqueeze(0)
     ##############################################################################
     #               END OF YOUR CODE                                             #
     ##############################################################################
@@ -1073,7 +1080,8 @@ class Transformer(nn.Module):
         # name of this layer as self.emb_layer                                   #
         ##########################################################################
         # Replace "pass" statement with your code
-        pass
+        self.emb_layer = nn.Embedding(vocab_len, emb_dim)
+        # self.softmax   = nn.Softmax(1)
         ##########################################################################
         #               END OF YOUR CODE                                         #
         ##########################################################################
@@ -1127,7 +1135,10 @@ class Transformer(nn.Module):
         # Hint: the mask shape will depend on the Tensor ans_b
         ##########################################################################
         # Replace "pass" statement with your code
-        pass
+        mask = get_subsequent_mask(ans_b[:, :-1]) # 16,5-1,5-1 (N,K_out, K_out)
+        enc_out = self.encoder(q_emb_inp) # 16,9,32 (N,K_inp, M)
+        dec_out = self.decoder(a_emb_inp, enc_out, mask)
+        dec_out = dec_out.reshape(mask.size(0) * mask.size(1), -1)
         ##########################################################################
         #               END OF YOUR CODE                                         #
         ##########################################################################
