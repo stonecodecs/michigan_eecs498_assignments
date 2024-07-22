@@ -221,8 +221,53 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     # HINT: You can refer to the torchvision library code:                      #
     # github.com/pytorch/vision/blob/main/torchvision/csrc/ops/cpu/nms_kernel.cpp
     #############################################################################
-    # Replace "pass" statement with your code
-    pass
+
+    def iou_between_boxes(a: torch.Tensor, b: torch.Tensor):
+        # REMINDER: bot > top in img coordinates -- (0,0) starts @ top-left
+        (ax1, ay1, ax2, ay2) = a[:,0], a[:,1], a[:,2], a[:,3]
+        (bx1, by1, bx2, by2) = b[:,0], b[:,1], b[:,2], b[:,3]
+        
+        inter_left  = torch.maximum(ax1, bx1)
+        inter_right = torch.minimum(ax2, bx2)
+        inter_top   = torch.maximum(ay1, by1)
+        inter_bot   = torch.minimum(ay2, by2)
+
+        intersection = torch.clamp(inter_right - inter_left, 0) * torch.clamp(inter_bot - inter_top, 0)
+        union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - intersection
+
+        return intersection / union
+    
+    # (1) (prepending '~' inverts the 'eliminated' mask)
+    eliminated = torch.zeros(scores.shape, dtype=torch.bool, device=scores.device)
+    _, sort_idx = torch.sort(scores, descending=True)
+
+    for i, max_idx in enumerate(sort_idx): # 'i' being the index of sort_idx
+        # if box was eliminated already
+        if i + 1 >= len(sort_idx): break
+        if eliminated[i]:
+            continue
+        
+        box_max = boxes[max_idx]
+        ious = iou_between_boxes(box_max.unsqueeze(0), boxes[sort_idx[i+1:]])
+
+        elim_idx = torch.where(ious > iou_threshold)[0]
+        if elim_idx.numel() != 0: # if no eliminations, do nothing
+            elim_idx += i + 1
+    
+        eliminated[elim_idx] = True # (2)
+        # print(eliminated)
+
+        # --- sequential:
+        # for box_idx in sort_idx[(i+1):]:
+        #     if eliminated[box_idx]:
+        #         continue
+        #     box = boxes[box_idx]
+        #     iou = iou_between_boxes(box_max, box.unsqueeze(0))
+        #     print(iou)
+        #     if iou > iou_threshold: # (2)
+        #         eliminated[box_idx] = True
+
+    keep = sort_idx[~eliminated]
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
