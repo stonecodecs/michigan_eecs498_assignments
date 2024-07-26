@@ -814,8 +814,8 @@ class RPN(nn.Module):
                 boxes = rcnn_apply_deltas_to_anchors(
                     level_boxreg_deltas[_batch_idx], level_anchors)
                 
-                torch.clamp_(boxes[:, [0,2]], 0, image_size[0]) # width
-                torch.clamp_(boxes[:, [1,3]], 0, image_size[1]) # height
+                boxes[:, [0,2]] = torch.clamp(boxes[:, [0,2]], 0, image_size[0]) # width
+                boxes[:, [1,3]] = torch.clamp(boxes[:, [1,3]], 0, image_size[1]) # height
                 
                 topk_scores, topk_idx = torch.topk(
                     level_obj_logits[_batch_idx],
@@ -1144,11 +1144,27 @@ class FasterRCNN(nn.Module):
         ######################################################################
         pred_scores, pred_classes = None, None
         # Replace "pass" statement with your code
-        print("pred_cls_logits", pred_cls_logits.shape)
-        pred_scores = pred_cls_logits.sigmoid_()
-        print("predscores", pred_scores)
-        pred_scores, pred_classes = torch.max(pred_scores, dim=1)
-        pred_classes -= 1 # shift back
+
+        pred_scores = F.softmax(pred_cls_logits, dim=1)
+        pred_scores, pred_classes = torch.max(pred_scores[:, 1:], dim=1)
+        # pred_scores, pred_classes = torch.topk(pred_scores[:, 1:], 5, dim=1)
+        # print(pred_classes)
+
+        keep = pred_scores > test_score_thresh
+
+        pred_scores = pred_scores[keep]
+        pred_classes = pred_classes[keep]
+        pred_boxes = pred_boxes[keep]
+        
+        # keep = pred_scores[:, 0] > test_score_thresh
+
+        # pred_scores = pred_scores[:,0][keep]
+        # pred_classes = pred_classes[:,0][keep]
+        # pred_boxes = pred_boxes[keep]
+
+        pred_boxes[:, [0,2]] = torch.clamp(pred_boxes[:, [0,2]], 0, images.shape[-2])
+        pred_boxes[:, [1,3]] = torch.clamp(pred_boxes[:, [1,3]], 0, images.shape[-1])
+
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
