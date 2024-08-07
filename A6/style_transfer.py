@@ -31,7 +31,17 @@ def content_loss(content_weight, content_current, content_original):
     # TODO: Compute the content loss for style transfer.                       #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # in style_transfer.ipynb, guided_style_transfer inputs 'invalid' input shape
+    # therefore, an amorphous sum is used here
+
+    # _, C, H, W = content_current.shape 
+    
+    # F = content_current.reshape(C, H * W)
+    # P = content_original.reshape(C, H * W)
+    # loss = content_weight * torch.sum((F - P) ** 2)
+    loss = content_weight * torch.sum((content_current - content_original) ** 2)
+
+    return loss 
     ############################################################################
     #                               END OF YOUR CODE                           #
     ############################################################################
@@ -57,7 +67,12 @@ def gram_matrix(features, normalize=True):
     # Don't forget to implement for both normalized and non-normalized version #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    N, C, H, W = features.shape
+
+    F = features.reshape(N, C, H * W)
+    gram = torch.bmm(F, F.transpose(1,2))
+    if normalize:
+       gram /= H * W * C
     ############################################################################
     #                               END OF YOUR CODE                           #
     ############################################################################
@@ -89,7 +104,14 @@ def style_loss(feats, style_layers, style_targets, style_weights):
     # You will need to use your gram_matrix function.                          #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    style_loss = 0
+
+    for i, idx in enumerate(style_layers):
+      style_loss += torch.sum(
+         style_weights[i] * (gram_matrix(feats[idx]) - style_targets[i]) ** 2
+      )
+
+    return style_loss
     ############################################################################
     #                               END OF YOUR CODE                           #
     ############################################################################
@@ -112,7 +134,11 @@ def tv_loss(img, tv_weight):
     # Your implementation should be vectorized and not require any loops!      #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    H_var = torch.sum((img[:, :, 1:, :] - img[:, :, :-1, :]) ** 2)
+    V_var = torch.sum((img[:, :, :, 1:] - img[:, :, :, :-1]) ** 2)
+
+    loss = tv_weight * (H_var + V_var)
+    return loss
     ############################################################################
     #                               END OF YOUR CODE                           #
     ############################################################################
@@ -139,7 +165,20 @@ def guided_gram_matrix(features, masks, normalize=True):
   # this problem.                                                              #
   ##############################################################################
   # Replace "pass" statement with your code
-  pass
+  N, R, C, H, W = features.shape
+  guided_gram = features.new_zeros((N, R, C, C))
+  
+  F = features * masks.unsqueeze(2)
+  F = F.reshape(N, R, C, H * W)
+
+  for i in range(R): # N,C,HW
+    batch_gram = torch.bmm(F[:, i, ...], (F[:, i, ...]).permute(0,2,1))
+    guided_gram[:, i, ...] = batch_gram
+
+  if normalize:
+     guided_gram /= H * W * C
+
+  return guided_gram # N,R,C,C
   ##############################################################################
   #                               END OF YOUR CODE                             #
   ##############################################################################
@@ -169,7 +208,14 @@ def guided_style_loss(feats, style_layers, style_targets, style_weights, content
     # TODO: Computes the guided style loss at a set of layers.                 #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    style_loss = 0
+
+    for i, idx in enumerate(style_layers): # idx = 0
+      style_loss += torch.sum(
+         style_weights[i] * (guided_gram_matrix(feats[idx], content_masks[idx]) - style_targets[i]) ** 2
+      )
+
+    return style_loss
     ############################################################################
     #                               END OF YOUR CODE                           #
     ############################################################################
