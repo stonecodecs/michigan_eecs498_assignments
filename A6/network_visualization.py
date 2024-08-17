@@ -143,14 +143,14 @@ def class_visualization_step(img, target_y, model, **kwargs):
     ########################################################################
     # Replace "pass" statement with your code
     output = model(img)
-    loss = torch.sum(output[:, target_y])
+    loss = torch.sum(output[:, target_y]) - l2_reg * torch.sum(img ** 2)
     loss.backward()
 
     grad = img.grad
 
     with torch.no_grad():
         # gradient ascent (+ instead of -)
-        img += learning_rate * (grad / torch.norm(grad)) + l2_reg
+        img += learning_rate * (grad / torch.norm(grad))
         img.grad.zero_()
     ########################################################################
     #                             END OF YOUR CODE                         #
